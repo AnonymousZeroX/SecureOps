@@ -1,1 +1,81 @@
-https://github.com/AnonymousZeroX/SecureOps.git
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+
+// Initialize express app
+const app = express();
+const port = 3000;
+
+// Middleware setup
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+    secret: 'yourSecretKey',  // Use a stronger secret in production
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }  // For testing. Set 'secure: true' in production with HTTPS.
+}));
+
+// Dummy database (use a real database in production)
+const users = [
+    { username: 'admin', passwordHash: '$2a$10$W2Y11u2qf0KhTdyh5d7vJePEl9WqlLCrntW66gZhZeeCglSYg5gZy' } // example hashed password for "password123"
+];
+
+// Registration route (for adding users)
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+
+    // Check if the user already exists
+    const userExists = users.find(user => user.username === username);
+    if (userExists) {
+        return res.status(400).send('User already exists');
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Store the new user (you would store this in a database)
+    users.push({ username, passwordHash: hashedPassword });
+    res.send('User registered successfully');
+});
+
+// Login route (for checking credentials)
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    // Find the user in the "database"
+    const user = users.find(user => user.username === username);
+    if (!user) {
+        return res.status(400).send('User not found');
+    }
+
+    // Compare the entered password with the stored hash
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (match) {
+        req.session.user = user; // Store the user in the session
+        res.redirect('/dashboard'); // Redirect to the dashboard
+    } else {
+        res.status(400).send('Invalid credentials');
+    }
+});
+
+// Dashboard route (only accessible after login)
+app.get('/dashboard', (req, res) => {
+    if (req.session.user) {
+        res.send(`Welcome to your dashboard, ${req.session.user.username}!`);
+    } else {
+        res.status(403).send('Access denied. Please log in.');
+    }
+});
+
+// Logout route (to clear the session)
+app.get('/logout', (req, res) => {
+    req.session.destroy(() => {
+        res.redirect('/');
+    });
+});
+
+// Start the server
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
